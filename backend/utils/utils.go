@@ -13,5 +13,5 @@ func GenerateJWT(username string) (string, error) {
 	})
 	SignedToken, err := token.SignedString([]byte("secret"))
 
-	return "Bearer" + SignedToken, err
+	return "Bearer " + SignedToken, err
 }

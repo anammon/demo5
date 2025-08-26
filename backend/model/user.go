@@ -13,7 +13,7 @@ type User struct {
 	Email     string `gorm:"unique"`
 	Name      string `gorm:"unique"`
 	CreatedAt time.Time
-	Birthday  time.Time
+	Birthday  time.Time      `json:"birthday" time_format:"2006-01-02" time_utc:"0"`
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 

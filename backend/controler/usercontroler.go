@@ -2,8 +2,9 @@ package controler
 
 import (
 	"backend/model"
-	"hash"
+	"backend/utils"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -11,16 +12,31 @@ import (
 
 type UserControler struct {
 }
+type RegisterDTO struct {
+	Account  string `json:"account" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Email    string `json:"email" binding:"required"`
+	Name     string `json:"name" binding:"required"`
+	Birthday string `json:"birthday" binding:"required"` // 前端传 YYYY-MM-DD
+}
 
 func (u UserControler) Register(c *gin.Context) {
-	var user model.User
-	if err := c.ShouldBind(&user); err != nil {
+	var dto RegisterDTO
+	if err := c.ShouldBind(&dto); err != nil {
 		c.JSON(400, gin.H{
 			"error": err.Error(),
 		})
 		return
 	}
-	
+	birthday, _ := time.Parse("2006-01-02", dto.Birthday)
+	user := model.User{
+		Account:   dto.Account,
+		Password:  dto.Password,
+		Email:     dto.Email,
+		Name:      dto.Name,
+		Birthday:  birthday, // 直接存 time.Time
+		CreatedAt: time.Now(),
+	}
 	if user.Account == "" || user.Password == "" || user.Email == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "账户、密码和邮箱为必填字段",
@@ -50,15 +66,16 @@ func (u UserControler) Register(c *gin.Context) {
 		})
 		return
 	}
-	hashpwd,err3:=bcrypt.GenerateFromPassword(
-		[]byte(user.Password),bcrypt.DefaultCost
+	hashpwd, err3 := bcrypt.GenerateFromPassword(
+		[]byte(user.Password), bcrypt.DefaultCost, // 添加逗号
 	)
-	if err3!=nil{
-		c.JSON(http.StatusInternalServerError,gin.H{
-			"error":"failed to hashpwd"
+	if err3 != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to hashpwd",
 		})
+		return // 添加return
 	}
-	user.Password = string(hashedPassword)
+	user.Password = string(hashpwd) // 修正变量名
 	user.CreatedAt = time.Now()
 
 	// 创建用户
@@ -68,24 +85,64 @@ func (u UserControler) Register(c *gin.Context) {
 		})
 		return
 	}
-   
+
 	// 返回成功响应（不返回密码）
 	c.JSON(http.StatusOK, gin.H{
 		"message": "注册成功",
 		"user": gin.H{
-			"id":       user.ID,
-			"account":  user.Account,
-			"email":    user.Email,
-			"name":     user.Name,
-			"birthday": user.Birthday.Format("2006-01-02"),
+			"id":         user.ID,
+			"account":    user.Account,
+			"email":      user.Email,
+			"name":       user.Name,
+			"birthday":   user.Birthday.Format("2006-01-02"),
 			"created_at": user.CreatedAt.Format("2006-01-02 15:04:05"),
 		},
 	})
-	c.JSON(200, gin.H{
-		"message": "Registration successful",
-		"user":    user,
-	})
+	// 删除重复的c.JSON调用
 }
-func (user UserControler) Login(c *gin.Context) {
+func (u UserControler) Login(c *gin.Context) { // 修正参数名
+	var loginData struct {
+		Account  string `json:"account" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&loginData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid input: " + err.Error(),
+		})
+		return
+	}
 
+	var user model.User
+	if err := model.DB.Where("account = ?", loginData.Account).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "账户输入错误",
+		})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(loginData.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "密码错误",
+		})
+		return
+	}
+	token, err := utils.GenerateJWT(user.Account) // 添加utils包名
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to generate token",
+		})
+		return // 添加return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Login successful",
+		"token":   token,
+		"user": gin.H{
+			"id":         user.ID,
+			"account":    user.Account,
+			"email":      user.Email,
+			"name":       user.Name,
+			"birthday":   user.Birthday.Format("2006-01-02"),
+			"created_at": user.CreatedAt.Format("2006-01-02 15:04:05"),
+		},
+	})
 }
