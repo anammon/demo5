@@ -102,8 +102,8 @@ func (u UserControler) Register(c *gin.Context) {
 }
 func (u UserControler) Login(c *gin.Context) { // 修正参数名
 	var loginData struct {
-		Account  string `json:"account" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		Identifier string `json:"identifier" binding:"required"`
+		Password   string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&loginData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -113,9 +113,9 @@ func (u UserControler) Login(c *gin.Context) { // 修正参数名
 	}
 
 	var user model.User
-	if err := model.DB.Where("account = ?", loginData.Account).First(&user).Error; err != nil {
+	if err := model.DB.Where("account = ?", loginData.Identifier).Or("email = ?", loginData.Identifier).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "账户输入错误",
+			"error": "账户或邮箱输入错误",
 		})
 		return
 	}
