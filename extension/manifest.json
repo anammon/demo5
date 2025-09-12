@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "AssistApp 截图 Demo",
+  "version": "1.0",
+  "description": "一个最小的 Edge 扩展示例，用于测试截图功能。",
+  "permissions": ["activeTab", "scripting", "tabs", "tabCapture"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
