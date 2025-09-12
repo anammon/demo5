@@ -12,5 +12,7 @@ func UserRouters(r *gin.Engine) {
 		userGroup.POST("/register", controler.UserControler{}.Register)
 		userGroup.POST("/login", controler.UserControler{}.Login)
 	}
-
+	// api := r.Group("/home").Use(middlewares.AuthMiddleware())
+	// {
+	// }
 }
