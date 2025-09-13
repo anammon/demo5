@@ -3,11 +3,11 @@ package model
 import "time"
 
 type App struct {
-	ID          uint      `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name        string    `json:"name" gorm:"type:varchar(255);not null"`
+	Description string    `json:"description" gorm:"type:text"`
+	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt   time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 func (App) TableName() string {
