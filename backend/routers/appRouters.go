@@ -10,7 +10,9 @@ import (
 func AppRouters(r *gin.Engine) {
 	appGroup := r.Group("/app").Use(middlewares.AuthMiddleware())
 	{
-		appGroup.POST("/create", controler.AppControler{}.Create)
-		appGroup.POST("/getapp", controler.AppControler{}.Create)
+		appGroup.POST("/", controler.AppControler{}.Create)
+		appGroup.GET("/", controler.AppControler{}.GetApp)
+		appGroup.POST("/:app_id/like", controler.LikeControler{}.LikeApp)
+		appGroup.GET("/:app_id/likes", controler.LikeControler{}.GetAppLikes)
 	}
 }
