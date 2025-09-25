@@ -20,6 +20,7 @@ func main() {
 		log.Fatal("数据库迁移失败: ", err)
 	}
 	routers.UserRouters(r)
+	routers.AppRouters(r)
 	if err := r.Run(config.AppConfig.App.Port); err != nil {
 		log.Fatal("服务启动失败: ", err)
 	}

@@ -133,7 +133,7 @@ func (AppControler) GetApp(c *gin.Context) {
 			return
 		}
 
-		appjson, err := json.Marshal(CachedData)
+		appjson, err := json.Marshal(applist)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
@@ -172,7 +172,7 @@ func (AppControler) GetApp(c *gin.Context) {
 	c.JSON(http.StatusOK, applist)
 }
 func (AppControler) GetAppById(c *gin.Context) {
-	idstr := c.Param("id")
+	idstr := c.Param("app_id")
 	id, err := strconv.Atoi(idstr)
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{

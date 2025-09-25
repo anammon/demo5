@@ -15,6 +15,11 @@ type Config struct {
 		Dsn          string
 		MaxIdleConns int
 		MaxOpenConns int
+	} //应该没用毕竟我封装在了model/core里
+	Redis struct {
+		Addr     string
+		PassWord string
+		DB       int
 	}
 }
 
@@ -31,4 +36,5 @@ func InitConfig() {
 	if err := viper.Unmarshal(AppConfig); err != nil {
 		log.Fatalf("unable to decode into struct-%v", err)
 	}
+	InitRedis()
 }
