@@ -1,4 +1,7 @@
+// frontend/src/pages/apps/Translator.tsx
 import { useState } from "react";
+import Layout from "../../components/Layout";
+import api from "../../services/api";
 
 export default function Translator() {
   const [inputText, setInputText] = useState("");
@@ -6,41 +9,42 @@ export default function Translator() {
 
   const handleTranslate = async () => {
     if (!inputText.trim()) return;
-
     try {
-      // mock 模拟翻译
-      setResult("EN: " + inputText);
+      // 如果你已经实现了后端 /translate 或 /api/translate，请改成正确路径
+      const res = await api.post("/translate", { texts: [inputText], targetLang: "en" });
+      // 假设后端返回 { translations: ["..."] }
+      if (res?.data?.translations) setResult(res.data.translations[0]);
+      else setResult("EN: " + inputText); // fallback
     } catch (err) {
-      setResult("翻译失败，请检查 API");
+      // fallback local mock
+      setResult("EN: " + inputText);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-green-50 via-green-100 to-white">
-      <div className="bg-white shadow-2xl rounded-2xl p-8 w-full max-w-lg">
-        <h1 className="text-2xl font-bold text-center text-green-600 mb-6">
-          AssistApp 翻译器
-        </h1>
+    <Layout>
+      <div className="max-w-3xl mx-auto">
+        <h2 className="text-2xl font-bold mb-4">翻译器</h2>
+
         <textarea
-          className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-green-400 mb-4"
-          rows={5}
+          rows={6}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          placeholder="请输入要翻译的文本..."
+          className="w-full p-3 border rounded mb-4"
+          placeholder="输入要翻译的文本或粘贴网页 OCR 结果"
         />
-        <button
-          onClick={handleTranslate}
-          className="w-full py-2 px-4 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
-        >
+
+        <button onClick={handleTranslate} className="px-6 py-2 bg-green-600 text-white rounded mb-4">
           翻译
         </button>
+
         {result && (
-          <div className="mt-6 p-4 bg-gray-50 rounded-xl border">
-            <h2 className="text-lg font-semibold text-gray-700 mb-2">翻译结果：</h2>
-            <p className="text-gray-800">{result}</p>
+          <div className="p-4 bg-gray-50 rounded">
+            <h3 className="font-semibold mb-2">翻译结果</h3>
+            <p>{result}</p>
           </div>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }
