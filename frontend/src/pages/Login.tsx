@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../services/api";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
@@ -10,13 +10,13 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post(
-        "http://localhost:3000/user/login",
+      // 使用封装好的 api 实例，打包后会根据环境使用正确的 baseURL
+      const res = await api.post(
+        "/user/login",
         {
           identifier: accountOrEmail,
           password,
-        },
-        { headers: { "Content-Type": "application/json" } }
+        }
       );
 
       localStorage.setItem("token", res.data.token);

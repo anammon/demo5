@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../services/api";
 import { useNavigate } from "react-router-dom";
 
 export default function Register() {
@@ -19,9 +19,7 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post("http://localhost:3000/user/register", form, {
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await api.post("/user/register", form);
 
       alert("注册成功！欢迎 " + res.data.user.name);
       navigate("/");

@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"backend/model"
 	"backend/utils"
 	"net/http"
 
@@ -25,7 +26,16 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Abort() //没有权限，终止后续处理
 			return
 		}
+		var user model.User
+		if err := model.DB.Where("account = ?", account).First(&user).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "用户不存在",
+			})
+			c.Abort()
+			return
+		}
 		c.Set("account", account)
+		c.Set("userID", user.ID)
 		c.Next()
 	}
 
