@@ -67,18 +67,17 @@ func (u UserControler) Register(c *gin.Context) {
 		return
 	}
 	hashpwd, err3 := bcrypt.GenerateFromPassword(
-		[]byte(user.Password), bcrypt.DefaultCost, // 添加逗号
+		[]byte(user.Password), bcrypt.DefaultCost,
 	)
 	if err3 != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to hashpwd",
 		})
-		return // 添加return
+		return
 	}
-	user.Password = string(hashpwd) // 修正变量名
+	user.Password = string(hashpwd)
 	user.CreatedAt = time.Now()
 
-	// 创建用户
 	if err := model.DB.Create(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "注册失败: " + err.Error(),
@@ -86,7 +85,6 @@ func (u UserControler) Register(c *gin.Context) {
 		return
 	}
 
-	// 返回成功响应（不返回密码）
 	c.JSON(http.StatusOK, gin.H{
 		"message": "注册成功",
 		"user": gin.H{
@@ -98,9 +96,8 @@ func (u UserControler) Register(c *gin.Context) {
 			"created_at": user.CreatedAt.Format("2006-01-02 15:04:05"),
 		},
 	})
-	// 删除重复的c.JSON调用
 }
-func (u UserControler) Login(c *gin.Context) { // 修正参数名
+func (u UserControler) Login(c *gin.Context) {
 	var loginData struct {
 		Identifier string `json:"identifier" binding:"required"`
 		Password   string `json:"password" binding:"required"`
@@ -126,12 +123,12 @@ func (u UserControler) Login(c *gin.Context) { // 修正参数名
 		})
 		return
 	}
-	token, err := utils.GenerateJWT(user.Account) // 添加utils包名
+	token, err := utils.GenerateJWT(user.Account)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to generate token",
 		})
-		return // 添加return
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
