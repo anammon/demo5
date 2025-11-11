@@ -20,14 +20,14 @@ type CombinedMatrixRequest struct {
 
 func validateMatrixReq(m MatrixRequest) error {
 	if m.Rows <= 0 || m.Cols <= 0 {
-		return fmt.Errorf("invalid matrix dimensions: %dx%d", m.Rows, m.Cols)
+		return fmt.Errorf("矩阵维度无效: %dx%d", m.Rows, m.Cols)
 	}
 	if len(m.Data) != m.Rows {
-		return fmt.Errorf("data rows %d don't match specified rows %d", len(m.Data), m.Rows)
+		return fmt.Errorf("数据行数 %d 与指定的行数 %d 不匹配", len(m.Data), m.Rows)
 	}
 	for i := range m.Data {
 		if len(m.Data[i]) != m.Cols {
-			return fmt.Errorf("data cols %d don't match specified cols %d at row %d", len(m.Data[i]), m.Cols, i)
+			return fmt.Errorf("第 %d 行的列数 %d 与指定的列数 %d 不匹配", i, len(m.Data[i]), m.Cols)
 		}
 	}
 	return nil

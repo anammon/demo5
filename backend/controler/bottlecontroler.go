@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 func toUint32(v interface{}) (uint32, error) {
@@ -114,63 +114,104 @@ func (BottleController) PickBottle(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
 		return
 	}
-
 	key := fmt.Sprintf("pick_limit:%d:%s", pickUID, time.Now().Format("2006-01-02"))
-	count, err := config.RedisClient.Get(config.RedisCtx, key).Int()
-	if err != nil && err != redis.Nil {
+
+	luaScript := `
+		local key = KEYS[1]
+		local limit = 3
+		local current = redis.call("GET", key)
+		if current then
+			current = tonumber(current)
+			if current >= limit then
+				return {0, 0}  -- 已超限，返回{success, remaining}
+			end
+		end
+		
+		local new_count = redis.call("INCR", key)
+		if new_count == 1 then
+			local tomorrow = redis.call("TIME")[1] + 86400
+			redis.call("EXPIREAT", key, tomorrow)
+		end
+		
+		return {1, limit - new_count}  -- 成功，返回{success, remaining}
+	`
+	result, err := config.RedisClient.Eval(config.RedisCtx, luaScript, []string{key}).Result()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误"})
 		return
 	}
-	if count >= 3 {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "今日捡瓶子次数已用完，明天再来吧~", "remaining": 0})
+
+	results, _ := result.([]interface{})
+	success, _ := results[0].(int64)
+	remaining, _ := results[1].(int64)
+
+	if success == 0 {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error":     "今日捡瓶子次数已用完，明天再来吧~",
+			"remaining": remaining,
+		})
 		return
 	}
 
-	// 只查未被捡的
-	var availableBottles []model.Bottle
-	if err := model.DB.Where("is_picked = ?", false).Find(&availableBottles).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	if len(availableBottles) == 0 {
-		DefaultBottle := []string{
-			"今天没有捡到漂流瓶~ 给你一句：加油！你很棒 💪",
-			"生活很难，但你也很强 🌈",
-			"没瓶子？那就给你一个拥抱 🤗",
+	// 在数据库事务中使用悲观锁捡瓶子
+	var pickedBottle model.Bottle
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		// 使用FOR UPDATE锁定记录，防止并发捡到同一个瓶子
+		var availableBottles []model.Bottle
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("is_picked = ?", false).
+			Limit(10). // 只取10个即可
+			Find(&availableBottles).Error; err != nil {
+			return err
 		}
-		msg := DefaultBottle[rand.Intn(len(DefaultBottle))]
-		c.JSON(http.StatusOK, gin.H{"id": 0, "content": msg, "created_at": time.Now(), "is_system": true})
-		return
-	}
 
-	// 随机取一个
-	b := availableBottles[rand.Intn(len(availableBottles))]
-	b.IsPicked = true
-	tmp := pickUID
-	b.PickUserID = &tmp
+		if len(availableBottles) == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		b := availableBottles[rand.Intn(len(availableBottles))]
+		if err := tx.Model(&b).Updates(map[string]interface{}{
+			"is_picked":    true,
+			"pick_user_id": pickUID,
+		}).Error; err != nil {
+			return err
+		}
 
-	if err := model.DB.Save(&b).Error; err != nil {
+		pickedBottle = b
+		return nil
+	})
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			config.RedisClient.Decr(config.RedisCtx, key)
+			DefaultBottle := []string{
+				"今天没有捡到漂流瓶~ 给你一句：加油！你很棒 💪",
+				"学习很累、生活很难，但你也很强 🌈",
+				"没瓶子？那就给你一个拥抱 🤗",
+			}
+			msg := DefaultBottle[rand.Intn(len(DefaultBottle))]
+			c.JSON(http.StatusOK, gin.H{
+				"id":         0,
+				"content":    msg,
+				"created_at": time.Now(),
+				"is_system":  true,
+				"remaining":  remaining,
+			})
+			return
+		}
+		config.RedisClient.Decr(config.RedisCtx, key)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if _, err := config.RedisClient.Incr(config.RedisCtx, key).Result(); err == nil && count == 0 {
-		tomorrow := time.Now().Add(24 * time.Hour)
-		midnight := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, tomorrow.Location())
-		config.RedisClient.ExpireAt(config.RedisCtx, key, midnight)
-	}
-
-	// 响应
 	response := gin.H{
-		"id":         b.ID,
-		"content":    b.Content,
-		"created_at": b.CreatedAt,
-		"is_picked":  b.IsPicked,
+		"id":         pickedBottle.ID,
+		"content":    pickedBottle.Content,
+		"created_at": pickedBottle.CreatedAt,
+		"is_picked":  pickedBottle.IsPicked,
+		"remaining":  remaining,
 	}
-	if !b.IsAnonymous {
+
+	if !pickedBottle.IsAnonymous {
 		response["is_anonymous"] = false
-		response["throw_user_info"] = b.ThrowUserID
+		response["throw_user_info"] = pickedBottle.ThrowUserID
 	} else {
 		response["is_anonymous"] = true
 	}
@@ -196,7 +237,7 @@ func (BottleController) GetMyThrownBottles(c *gin.Context) {
 		if rightdate, err := time.Parse("2006-01-02", datestr); err == nil {
 			query = query.Where("created_at between ? and ?", rightdate, rightdate.Add(24*time.Hour))
 		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "日期格式错误,应为YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "日期格式错误,应为2000-01-01"})
 			return
 		}
 	}

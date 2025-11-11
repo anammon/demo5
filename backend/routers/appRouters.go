@@ -13,6 +13,7 @@ func AppRouters(r *gin.Engine) {
 		// 应用相关
 		appGroup.POST("/", controler.AppControler{}.Create)
 		appGroup.GET("/", controler.AppControler{}.GetApp)
+		appGroup.PUT("/:app_id", controler.AppControler{}.Update)
 		appGroup.GET("/:app_id", controler.AppControler{}.GetAppById)
 		appGroup.POST("/:app_id/like", controler.LikeControler{}.LikeApp)
 		appGroup.GET("/:app_id/likes", controler.LikeControler{}.GetAppLikes)

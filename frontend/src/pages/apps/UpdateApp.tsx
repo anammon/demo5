@@ -1,10 +1,10 @@
-// frontend/src/pages/apps/CreateApp.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createApp } from "../../services/app";
+import { fetchAppById, updateApp } from "../../services/app";
 
-export default function CreateApp() {
+export default function UpdateApp() {
   const navigate = useNavigate();
+  const [idInput, setIdInput] = useState("");
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -14,36 +14,64 @@ export default function CreateApp() {
     status: "published",
   });
   const [loading, setLoading] = useState(false);
+  const [loadingApp, setLoadingApp] = useState(false);
+
+  useEffect(() => {
+    // try read id from query string
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id") || params.get("app_id");
+      if (id) {
+        setIdInput(id);
+        loadApp(id);
+      }
+    } catch (e) {}
+  }, []);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
+  const loadApp = async (id: string) => {
+    setLoadingApp(true);
+    try {
+      const data = await fetchAppById(id);
+      setForm({
+        name: data.Name || data.name || "",
+        description: data.Description || data.description || "",
+        icon: data.Icon || data.icon || "",
+        type: data.Type || data.type || "",
+        tags: data.Tags || data.tags || "",
+        status: data.Status || data.status || "published",
+      });
+    } catch (e) {
+      alert("加载应用信息失败");
+    } finally {
+      setLoadingApp(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!idInput) {
+      alert("请输入要更新的应用 ID");
+      return;
+    }
     setLoading(true);
     try {
+      const id = Number(idInput);
       const payload = {
+        id,
         name: form.name.trim(),
         description: form.description.trim(),
         icon: form.icon.trim(),
         type: form.type.trim(),
-        // 后端 model.App.Tags 是字符串类型，发送数组会导致 BindJSON 失败
         tags: form.tags.trim(),
         status: form.status,
       };
-        // 如果用户未填写 icon，依据 name 自动填默认图标（例如矩阵/漂流瓶）
-        const nameLower = (payload.name || "").toLowerCase();
-        if (!payload.icon) {
-          if (nameLower.includes("矩阵") || nameLower.includes("matrix")) {
-            payload.icon = "/icons/appicons/matrix.webp";
-          } else if (nameLower.includes("漂流瓶") || nameLower.includes("bottle")) {
-            payload.icon = "/icons/appicons/bottle.webp";
-          }
-        }
-      await createApp(payload);
+      await updateApp(id, payload);
       navigate("/home");
     } catch (err: any) {
-      alert("创建失败: " + (err.response?.data?.error || err.message || "未知错误"));
+      alert("更新失败: " + (err.response?.data?.error || err.message || "未知错误"));
     } finally {
       setLoading(false);
     }
@@ -53,7 +81,18 @@ export default function CreateApp() {
     <div className="relative w-screen h-screen flex items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-200 via-blue-100 to-white"></div>
       <div className="relative z-10 bg-white shadow-2xl rounded-2xl p-8 w-full max-w-2xl">
-        <h2 className="text-2xl font-bold mb-4">创建新应用</h2>
+        <h2 className="text-2xl font-bold mb-4">更新应用</h2>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-1">应用 ID</label>
+          <div className="flex gap-2">
+            <input value={idInput} onChange={(e) => setIdInput(e.target.value)} className="flex-1 p-2 border rounded" />
+            <button onClick={() => loadApp(idInput)} disabled={!idInput || loadingApp} className="px-4 py-2 bg-gray-600 text-white rounded">
+              {loadingApp ? "加载中..." : "加载"}
+            </button>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">应用名称</label>
@@ -76,7 +115,7 @@ export default function CreateApp() {
             <input name="icon" value={form.icon} onChange={onChange} className="w-full p-2 border rounded" />
           </div>
           <button type="submit" disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded">
-            {loading ? "创建中..." : "创建应用"}
+            {loading ? "更新中..." : "更新应用"}
           </button>
         </form>
       </div>

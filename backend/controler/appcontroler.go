@@ -23,22 +23,18 @@ type AppControler struct {
 func GetAppCacheKey(Id uint) string {
 	return "app:" + strconv.Itoa(int(Id))
 }
-
-// --- 新增：按页缓存的 key 与 TTL ---
 const appListCachePrefix = "apps:page:"  // 前缀
 const appListCacheTTL = 10 * time.Minute // 缓存过期时间
 
-// 生成按页缓存 key（会对查询参数做 url-escape）
 func buildAppListCacheKey(page, pageSize int, name, description string) string {
 	ne := url.QueryEscape(name)
 	de := url.QueryEscape(description)
 	return fmt.Sprintf("%s%d:size:%d:name:%s:desc:%s", appListCachePrefix, page, pageSize, ne, de)
 }
 
-// 删除所有按页缓存（用于 Create/Update 后全量失效）
 // 使用 SCAN + DEL，避免 KEYS 在大数据量下阻塞
 func deleteAppListCache() error {
-	pattern := appListCachePrefix + "*" // apps:page:*
+	pattern := appListCachePrefix + "*" 
 	var cursor uint64 = 0
 	for {
 		keys, cur, err := config.RedisClient.Scan(config.RedisCtx, cursor, pattern, 100).Result()
@@ -66,7 +62,6 @@ type AppListPage struct {
 	PageSize int         `json:"pageSize"`
 }
 
-// Create 保持你的逻辑，但改为失效按页缓存（而不是只删单个固定键）
 func (AppControler) Create(c *gin.Context) {
 	var app model.App
 	if err := c.ShouldBindJSON(&app); err != nil {
@@ -95,13 +90,11 @@ func (AppControler) Create(c *gin.Context) {
 		return
 	}
 
-	// 失效所有按页缓存（保证新创建的 app 能即时被列表看到）
 	if err := deleteAppListCache(); err != nil {
-		// 记录但不阻塞创建成功响应（缓存失效失败属于可恢复/可忽略的次要错误）
 		log.Printf("deleteAppListCache error after Create: %v", err)
 	}
 
-	// 同时删除单条缓存（如果存在）
+	// 同时删除单条缓存
 	if err := config.RedisClient.Del(config.RedisCtx, GetAppCacheKey(app.ID)).Err(); err != nil {
 		log.Printf("delete single app cache after Create error: %v", err)
 	}
@@ -109,7 +102,6 @@ func (AppControler) Create(c *gin.Context) {
 	c.JSON(http.StatusOK, app)
 }
 
-// Update 保持逻辑，同时在成功后失效缓存
 func (AppControler) Update(c *gin.Context) {
 	var req model.App
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -146,13 +138,9 @@ func (AppControler) Update(c *gin.Context) {
 		})
 		return
 	}
-
-	// 失效列表缓存（所有页）
 	if err := deleteAppListCache(); err != nil {
 		log.Printf("deleteAppListCache error after Update: %v", err)
 	}
-
-	// 删除该应用的单条缓存
 	appkey := GetAppCacheKey(app.ID)
 	if err := config.RedisClient.Del(config.RedisCtx, appkey).Err(); err != nil {
 		log.Printf("delete single app cache after Update error: %v", err)
@@ -160,10 +148,7 @@ func (AppControler) Update(c *gin.Context) {
 
 	c.JSON(http.StatusOK, app)
 }
-
-// GetApp - 支持 name/description 搜索 + page/pageSize 分页 + per-page Redis 缓存
 func (AppControler) GetApp(c *gin.Context) {
-	// 读取查询参数
 	name := c.Query("name")
 	description := c.Query("description")
 
@@ -177,8 +162,6 @@ func (AppControler) GetApp(c *gin.Context) {
 	}
 
 	cacheKey := buildAppListCacheKey(page, pageSize, name, description)
-
-	// 1) 尝试从 Redis 取缓存
 	if cached, err := config.RedisClient.Get(config.RedisCtx, cacheKey).Result(); err == nil {
 		var pageRes AppListPage
 		if err := json.Unmarshal([]byte(cached), &pageRes); err == nil {
@@ -190,13 +173,11 @@ func (AppControler) GetApp(c *gin.Context) {
 			})
 			return
 		}
-		// 若反序列化失败，则继续从 DB 查询并覆盖缓存
 	} else if err != redis.Nil {
-		// 记录 Redis 报错（但继续从 DB 查询）
 		log.Printf("redis get error for key %s: %v", cacheKey, err)
 	}
-
-	// 2) 缓存未命中 -> 从 DB 查询
+    
+	// 2) 缓存未命中从 DB 查询
 	var applist []model.App
 	query := model.DB.Model(&model.App{})
 
@@ -219,7 +200,7 @@ func (AppControler) GetApp(c *gin.Context) {
 		return
 	}
 
-	// 3) 构建响应并缓存（按页）
+	// 3) 构建响应并缓存
 	pageRes := AppListPage{
 		Data:     applist,
 		Total:    total,
@@ -233,8 +214,6 @@ func (AppControler) GetApp(c *gin.Context) {
 	} else {
 		log.Printf("json.Marshal pageRes error: %v", err)
 	}
-
-	// 返回分页格式（前端按 { data, total, page, pageSize } 使用）
 	c.JSON(http.StatusOK, gin.H{
 		"data":     applist,
 		"total":    total,
@@ -243,7 +222,6 @@ func (AppControler) GetApp(c *gin.Context) {
 	})
 }
 
-// GetAppById 保持原有行为（单條缓存）
 func (AppControler) GetAppById(c *gin.Context) {
 	idstr := c.Param("app_id")
 	id, err := strconv.Atoi(idstr)

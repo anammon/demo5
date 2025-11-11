@@ -6,6 +6,7 @@ import type { AppsPage, AppDTO } from "../services/app";
 export default function Home() {
   const navigate = useNavigate();
   const [apps, setApps] = useState<AppDTO[]>([]);
+  const [matrixAppId, setMatrixAppId] = useState<string | null>(null);
   const [likes, setLikes] = useState<Record<number, number>>({});
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -29,8 +30,12 @@ export default function Home() {
     }
   };
 
+  // debounce load when q/page changes to avoid too many requests while typing
   useEffect(() => {
-    load();
+    const id = setTimeout(() => {
+      load();
+    }, 300);
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, q]);
 
@@ -44,6 +49,22 @@ export default function Home() {
     const name = String(a.Name || a.name || "").toLowerCase();
     return name.includes("矩阵") || name.includes("matrix");
   });
+
+  // 当 apps 更新时，找到第一个矩阵应用的 id（用于固定矩阵入口显示点赞）
+  useEffect(() => {
+    let found: string | null = null;
+    for (const a of apps) {
+      const name = String(a.Name || a.name || "").toLowerCase();
+      if (name.includes("矩阵") || name.includes("matrix")) {
+        const id = String(a.ID ?? a.id ?? "");
+        if (id) {
+          found = id;
+          break;
+        }
+      }
+    }
+    setMatrixAppId(found);
+  }, [apps]);
 
   // 获取点赞数
   useEffect(() => {
@@ -82,15 +103,35 @@ export default function Home() {
 
       {/* 工具条 */}
       <div className="relative z-10 bg-white/80 backdrop-blur-md shadow px-6 py-4 flex justify-between items-center">
-        <input
-          placeholder="搜索应用"
-          value={q}
-          onChange={(e) => {
-            setPage(1);
-            setQ(e.target.value);
-          }}
-          className="px-3 py-2 border rounded-md flex-1 max-w-xs"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            placeholder="搜索应用"
+            value={q}
+            onChange={(e) => {
+              setPage(1);
+              setQ(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              // 明确拦截回车，避免浏览器或其他逻辑触发不期望的导航
+              if (e.key === "Enter") {
+                e.preventDefault();
+                setPage(1);
+                // 立即触发一次加载，确保用户按回车能立刻搜索到结果
+                load();
+              }
+            }}
+            className="px-3 py-2 border rounded-md flex-1 max-w-xs"
+          />
+          <button
+            onClick={() => {
+              setPage(1);
+              load();
+            }}
+            className="px-3 py-2 bg-gray-100 rounded-md"
+          >
+            搜索
+          </button>
+        </div>
         <div className="flex items-center gap-3">
           <Link
             to="/apps/create"
@@ -131,6 +172,9 @@ export default function Home() {
           {/* 动态应用 */}
           {apps.map((app) => {
             const id = Number(app.ID ?? app.id ?? 0);
+            const nameLower = String(app.Name || app.name || "").toLowerCase();
+            // dynamic icon fallback: prefer specified icon, otherwise use app-type defaults
+            const dynamicIcon = app.Icon || app.icon || (nameLower.includes("矩阵") || nameLower.includes("matrix") ? "/icons/appicons/matrix.webp" : (nameLower.includes("漂流瓶") || nameLower.includes("bottle") ? "/icons/appicons/bottle.webp" : null));
             return (
               <div
                 key={id}
@@ -141,15 +185,15 @@ export default function Home() {
                   if (name.includes("漂流瓶") || name.includes("bottle")) {
                     navigate(`/apps/bottle`);
                   } else if (name.includes("矩阵") || name.includes("matrix")) {
-                    navigate(`/apps/matrix`);
+                    navigate(`/apps/matrix?app_id=${id}`);
                   } else {
                     navigate(`/apps/${id}`);
                   }
                 }}
               >
-                {app.Icon || app.icon ? (
+                {dynamicIcon ? (
                   <img
-                    src={app.Icon || app.icon}
+                    src={dynamicIcon}
                     alt={app.Name || app.name}
                     className="w-20 h-20 mb-3 rounded-lg object-cover"
                   />
@@ -212,6 +256,29 @@ export default function Home() {
               <p className="text-sm text-gray-500 line-clamp-2 text-center mb-2">
                 输入两个矩阵，进行加减乘运算。
               </p>
+              {/* 如果存在矩阵应用 id，则显示点赞按钮和计数（行为与动态卡片一致） */}
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!matrixAppId) {
+                      // 提示用户没有已注册的矩阵应用
+                      alert("当前没有已注册的矩阵应用，无法点赞。");
+                      return;
+                    }
+                    const idNum = Number(matrixAppId);
+                    if (!idNum) return;
+                    likeApp(idNum).then(() => {
+                      setLikes((prev) => ({ ...prev, [idNum]: (prev[idNum] || 0) + 1 }));
+                    }).catch((err) => console.error(err));
+                  }}
+                  title={matrixAppId ? "点赞" : "当前没有已注册的矩阵应用，无法点赞"}
+                  className={`text-red-500 transition ${matrixAppId ? 'hover:scale-110' : 'opacity-50 cursor-not-allowed'}`}
+                >
+                  ♥
+                </button>
+                <span className="text-gray-600 text-sm">{matrixAppId ? (likes[Number(matrixAppId)] ?? 0) : 0}</span>
+              </div>
             </div>
           )}
         </div>

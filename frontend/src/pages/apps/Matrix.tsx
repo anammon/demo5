@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../../services/api";
+import { fetchApps } from "../../services/app";
 
 function parseMatrixInput(text: string): number[][] {
   // 支持以换行分隔行，逗号或空格分隔列
@@ -22,6 +23,9 @@ export default function Matrix() {
   const [bText, setBText] = useState("5 6\n7 8");
   const [result, setResult] = useState<number[][] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [appId, setAppId] = useState<string | null>(null);
+  const [likes, setLikes] = useState<number | null>(null);
+  const [liking, setLiking] = useState(false);
 
   const buildPayload = () => {
     const A = parseMatrixInput(aText);
@@ -53,9 +57,82 @@ export default function Matrix() {
     }
   };
 
+  useEffect(() => {
+    // 尝试从 query string 中读取 app_id（如果 Home 跳转时传了 id）
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("app_id");
+      if (id) {
+        setAppId(id);
+        // 读取 likes
+        api.get(`/app/${id}/likes`).then((res) => {
+          setLikes(res.data.likes ?? res.data.like ?? 0);
+        }).catch((e) => {
+          console.warn("无法读取 likes", e);
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  // 如果没有从 query 得到 app_id，尝试从应用列表中找到第一个矩阵应用并使用它的 id
+  useEffect(() => {
+    if (appId) return;
+    (async () => {
+      try {
+        const res = await fetchApps({ page: 1, pageSize: 50 });
+        const apps = res.data || [];
+        for (const a of apps) {
+          const name = String(a.Name || a.name || "").toLowerCase();
+          if (name.includes("矩阵") || name.includes("matrix")) {
+            const id = String(a.ID ?? a.id ?? "");
+            if (id) {
+              setAppId(id);
+              try {
+                const r = await api.get(`/app/${id}/likes`);
+                setLikes(r.data.likes ?? r.data.like ?? 0);
+              } catch (e) {
+                console.warn("读取 likes 失败", e);
+              }
+            }
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn("fetchApps 失败", e);
+      }
+    })();
+  }, [appId]);
+
+  const handleLike = async () => {
+    if (!appId) return;
+    setLiking(true);
+    try {
+      await api.post(`/app/${appId}/like`);
+      // optimistic update
+      setLikes((v) => (v ?? 0) + 1);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.response?.data?.error || e.message || "点赞失败");
+    } finally {
+      setLiking(false);
+    }
+  };
+
   return (
     <div className="p-6">
-      <h2 className="text-xl font-bold mb-4">矩阵计算</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">矩阵计算</h2>
+        {appId && (
+          <div className="flex items-center gap-2">
+            <button onClick={handleLike} disabled={liking} className="px-3 py-1 bg-pink-500 text-white rounded">
+              ❤️ 点赞
+            </button>
+            <div className="text-sm text-gray-600">{likes ?? 0}</div>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-6 mb-4">
         <div>
