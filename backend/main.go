@@ -24,7 +24,7 @@ func main() {
 	if err := model.DB.AutoMigrate(&model.User{}, &model.App{}, &model.Bottle{}); err != nil {
 		log.Fatal("数据库迁移失败: ", err)
 	}
-	// 启动 likes flush 后台任务（把 Redis 计数周期性持久化到 MySQL）
+
 	service.StartLikeFlusher(model.DB, 10*time.Second)
 	routers.UserRouters(r)
 	routers.AppRouters(r)

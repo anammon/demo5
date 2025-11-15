@@ -115,27 +115,30 @@ func (BottleController) PickBottle(c *gin.Context) {
 		return
 	}
 	key := fmt.Sprintf("pick_limit:%d:%s", pickUID, time.Now().Format("2006-01-02"))
-
+	now := time.Now()
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	expireAt := tomorrow.Unix()
 	luaScript := `
-		local key = KEYS[1]
-		local limit = 3
-		local current = redis.call("GET", key)
-		if current then
-			current = tonumber(current)
-			if current >= limit then
-				return {0, 0}  -- 已超限，返回{success, remaining}
+			local key = KEYS[1]
+			local expire_at = tonumber(ARGV[1])
+			local limit = 3
+			
+			local current = redis.call("GET", key)
+			if current then
+				current = tonumber(current)
+				if current >= limit then
+					return {0, 0}  -- 已超限
+				end
 			end
-		end
-		
-		local new_count = redis.call("INCR", key)
-		if new_count == 1 then
-			local tomorrow = redis.call("TIME")[1] + 86400
-			redis.call("EXPIREAT", key, tomorrow)
-		end
-		
-		return {1, limit - new_count}  -- 成功，返回{success, remaining}
-	`
-	result, err := config.RedisClient.Eval(config.RedisCtx, luaScript, []string{key}).Result()
+			
+			local new_count = redis.call("INCR", key)
+			if new_count == 1 then
+				redis.call("EXPIREAT", key, expire_at)
+			end
+			
+			return {1, limit - new_count}  -- 成功
+		`
+	result, err := config.RedisClient.Eval(config.RedisCtx, luaScript, []string{key}, expireAt).Result()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "系统错误"})
 		return
